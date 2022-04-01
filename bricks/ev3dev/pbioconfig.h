@@ -6,5 +6,6 @@
 #define PBIO_CONFIG_EV3_INPUT_DEVICE        (1)
 #define PBIO_CONFIG_LIGHT                   (1)
 #define PBIO_CONFIG_LOGGER                  (1)
+#define PBIO_CONFIG_ORIENTATION             (0)
 #define PBIO_CONFIG_SERIAL                  (1)
 #define PBIO_CONFIG_TACHO                   (1)
