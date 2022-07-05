@@ -4,9 +4,14 @@
 
 ## [Unreleased]
 
+### Added
+- Added `MoveHub.imu.tilt()` ([support#539]).
+
 ### Fixed
 - Fix integral control not working properly due to mistakes introduced while
   converting the controllers to use millidegrees.
+
+[support#539]: https://github.com/pybricks/support/issues/539
 
 ## [3.2.0b2] - 2022-07-06
 
