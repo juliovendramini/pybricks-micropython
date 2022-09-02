@@ -20,7 +20,7 @@ void pbsys_command(const uint8_t *data, uint32_t size) {
 
     switch (cmd) {
         case PBIO_PYBRICKS_COMMAND_STOP_USER_PROGRAM:
-            pbsys_program_stop();
+            pbsys_program_stop(false);
             break;
         default:
             // TODO: return error

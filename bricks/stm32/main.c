@@ -36,9 +36,23 @@ extern uint32_t _estack;
 extern uint32_t _sstack;
 extern uint32_t _heap_end;
 
+// Outermost nlr buffer.
+nlr_buf_t nlr_main;
+
 // Implementation for MICROPY_EVENT_POLL_HOOK
 void pb_stm32_poll(void) {
     while (pbio_do_one_event()) {
+    }
+
+    // On forced exit, pop back to outer nlr buffer so the exception will
+    // always be raised and the application program exits cleanly. We also need
+    // MP_STATE_THREAD(mp_pending_exception) to be the system exit exception
+    // but we don't check it because it is set along with pyexec_system_exit.
+    if (pyexec_system_exit == PYEXEC_FORCED_EXIT) {
+        while (MP_STATE_MAIN_THREAD(nlr_top) != &nlr_main) {
+            nlr_pop();
+        }
+        pyexec_system_exit = 0;
     }
 
     mp_handle_pending(true);
@@ -56,7 +70,7 @@ void pb_stm32_poll(void) {
 }
 
 // callback for when stop button is pressed in IDE or on hub
-void pbsys_main_stop_program(void) {
+void pbsys_main_stop_program(bool force_stop) {
 
     static const mp_obj_tuple_t args = {
         .base = { .type = &mp_type_tuple },
@@ -64,9 +78,6 @@ void pbsys_main_stop_program(void) {
         .items = { MP_ROM_QSTR(MP_QSTR_stop_space_button_space_pressed) },
     };
     static mp_obj_exception_t system_exit;
-
-    // Trigger soft reboot.
-    pyexec_system_exit = PYEXEC_FORCED_EXIT;
 
     // Schedule SystemExit exception.
     system_exit.base.type = &mp_type_SystemExit;
@@ -80,6 +91,11 @@ void pbsys_main_stop_program(void) {
         MP_STATE_VM(sched_state) = MP_SCHED_PENDING;
     }
     #endif
+
+    // IDE stop button and long-press power button will force an exit.
+    if (force_stop) {
+        pyexec_system_exit = PYEXEC_FORCED_EXIT;
+    }
 }
 
 bool pbsys_main_stdin_event(uint8_t c) {
@@ -124,8 +140,7 @@ static void run_repl() {
     #if MICROPY_ENABLE_COMPILER
     // Reset REPL history.
     readline_init0();
-    nlr_buf_t nlr;
-    if (nlr_push(&nlr) == 0) {
+    if (nlr_push(&nlr_main) == 0) {
         // Run the REPL.
         pyexec_friendly_repl();
         nlr_pop();
@@ -133,7 +148,7 @@ static void run_repl() {
         // clear any pending exceptions (and run any callbacks).
         mp_handle_pending(false);
         // Print which exception triggered this.
-        mp_obj_print_exception(&mp_plat_print, (mp_obj_t)nlr.ret_val);
+        mp_obj_print_exception(&mp_plat_print, (mp_obj_t)nlr_main.ret_val);
     }
     #else
     mp_hal_stdout_tx_str("REPL not supported!\r\n");
@@ -173,8 +188,7 @@ static void do_execute_raw_code(mp_module_context_t *context, const mp_raw_code_
 
 static void run_user_program(uint32_t len, uint8_t *buf) {
 
-    nlr_buf_t nlr;
-    if (nlr_push(&nlr) == 0) {
+    if (nlr_push(&nlr_main) == 0) {
 
         // Load user .mpy file without erasing it.
         mp_reader_t reader;
@@ -200,10 +214,10 @@ static void run_user_program(uint32_t len, uint8_t *buf) {
         mp_handle_pending(false);
 
         // Print which exception triggered this.
-        mp_obj_print_exception(&mp_plat_print, (mp_obj_t)nlr.ret_val);
+        mp_obj_print_exception(&mp_plat_print, (mp_obj_t)nlr_main.ret_val);
 
         // On KeyboardInterrupt, drop to REPL for debugging.
-        if (mp_obj_exception_match((mp_obj_t)nlr.ret_val, &mp_type_KeyboardInterrupt)) {
+        if (mp_obj_exception_match((mp_obj_t)nlr_main.ret_val, &mp_type_KeyboardInterrupt)) {
 
             // The global scope is preserved to facilitate debugging, but we
             // stop active resources like motors and sounds. They are stopped
