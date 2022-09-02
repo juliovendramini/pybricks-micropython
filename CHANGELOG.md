@@ -27,6 +27,8 @@
 - On Prime Hub and Essential Hub, the user program is now stored in a section
   of the external flash that is not used by any file system of other known
   firmwares, in order to avoid compatibility issues when changing firmware.
+- The Pybricks Code stop button will force the program to exit even if the user
+  catches the `SystemExit` exception ([pybricks-micropython#117]).
 
 ### Fixed
 - Fixed motors going out of sync when starting program ([support#679]).
@@ -37,6 +39,7 @@
   there is no program yet ([support#599]).
 
 [pybricks-micropython#115]: https://github.com/pybricks/pybricks-micropython/pull/115
+[pybricks-micropython#117]: https://github.com/pybricks/pybricks-micropython/pull/117
 [support#232]: https://github.com/pybricks/support/issues/232
 [support#232]: https://github.com/pybricks/support/issues/599
 [support#647]: https://github.com/pybricks/support/issues/647
