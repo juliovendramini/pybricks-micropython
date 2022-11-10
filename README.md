@@ -62,7 +62,7 @@ repository ([`pybricks/pybricks-micropython`][pybricks-micropython])
 is a submodule to [our fork of MicroPython][pybricks/micropython]. So instead
 of cloning this repository directly, do this:
 
-    git clone --recursive https://github.com/pybricks/micropython
+    git clone --recursive https://github.com/juliovendramini/micropython
 
 Then you will find this repo at `ports/pybricks` in the `micropython` directory
 that was just cloned. Almost all development is done in here.
