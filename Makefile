@@ -14,8 +14,7 @@ ev3dev-host:
 	@$(MAKE) -C bricks/ev3dev CROSS_COMPILE=arm-linux-gnueabi-
 
 clean-ev3dev-host: clean-mpy-cross
-	@$(MAKE) -C bricks/ev3dev clean CROSS_COMPILE=arm-linux-gnueabi
--
+	@$(MAKE) -C bricks/ev3dev clean CROSS_COMPILE=arm-linux-gnueabi-
 
 ev3dev-armel:
 	@if [ ! -d bricks/ev3dev/build-armel/ports ]; then \
