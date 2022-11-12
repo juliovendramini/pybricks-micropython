@@ -1,4 +1,4 @@
-# Pybricks v2
+# Pybricks v2 - Modificação pra simplificar (teste)
 
 Pybricks brings Python-like coding to programmable LEGO bricks, and transforms
 remote-controlled smart hubs into truly autonomous robots.
