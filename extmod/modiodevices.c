@@ -628,4 +628,221 @@ const mp_obj_module_t pb_module_iodevices = {
     .globals = (mp_obj_dict_t*)&pb_module_iodevices_globals,
 };
 
+
+
+
+
+
+
+
+
+//*******************************
+//***********************************
+//************************************
+////Simple lego sensor comunication without driver
+// pybricks.iodevices.LEGODevice class object
+typedef struct _iodevices_LEGODevice_obj_t {
+    mp_obj_base_t base;
+    pbdevice_t *pbdev;
+    pbio_serial_t *serial;
+} iodevices_LEGODevice_obj_t;
+
+// pybricks.iodevices.LEGODevice.__init__
+STATIC mp_obj_t iodevices_LEGODevice_make_new(const mp_obj_type_t *otype, size_t n_args, size_t n_kw, const mp_obj_t *args ) {
+    PB_PARSE_ARGS_CLASS(n_args, n_kw, args,
+        PB_ARG_REQUIRED(port)
+    );
+    iodevices_LEGODevice_obj_t *self = m_new_obj(iodevices_LEGODevice_obj_t);
+    self->base.type = (mp_obj_type_t*) otype;
+
+    // Get port number
+    mp_int_t port_num = pb_type_enum_get_value(port, &pb_enum_type_Port);
+
+    // Init UART port
+    self->pbdev = pbdevice_get_device(port_num, PBIO_IODEV_TYPE_ID_CUSTOM_UART);
+
+    // init serial with 2400
+    pb_assert(pbio_serial_get(
+        &self->serial,
+        port_num,
+        2400,
+        200 //timeout of 200ms
+    ));
+    pb_assert(pbio_serial_clear(self->serial));
+
+    // find end of info on 2400bps sensor mode
+    // Read up to the timeout
+    pbio_error_t err;
+    uint8_t len = 1;
+    uint8_t *buf = m_malloc(len);
+    if (buf == NULL) {
+        pb_assert(PBIO_ERROR_FAILED);
+    }
+    int count = 0;
+    uint8_t first_part = 1;
+    //find string 237,4 (sensor color)
+    while(count < 1000){
+        if((err = pbio_serial_read(self->serial, buf, len)) == PBIO_ERROR_AGAIN) {
+            mp_hal_delay_ms(10);
+        }
+        if(first_part == 1 && buf[0] == 237){
+            first_part = 0;
+            continue;
+        }else if(first_part == 0 && buf[0] == 4){
+            break;
+        }else{
+            first_part = 1;
+        }
+        count++;
+    }
+    if(count == 1000){
+         pb_assert(PBIO_ERROR_FAILED);
+    }
+    //change baudrate
+     pb_assert(pbio_serial_get(
+        &self->serial,
+        port_num,
+        57600,
+        200 //timeout of 200ms
+    ));
+    pb_assert(pbio_serial_clear(self->serial));
+    uint8_t bytes[3] = {67,0, 255^67^0};
+    pbio_serial_write(self->serial, bytes, 3);
+/*
+def send_select(mode):
+    global ser
+    checksum = 255 ^ 67
+    checksum = checksum ^ mode
+    ser.write(bytes([67]));
+    ser.write(bytes([mode]));
+    ser.write(bytes([checksum]));
+*/
+
+
+    return MP_OBJ_FROM_PTR(self);
+}
+
+// pybricks.iodevices.LEGODevice.write
+STATIC mp_obj_t iodevices_LEGODevice_write(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+
+    PB_PARSE_ARGS_METHOD(n_args, pos_args, kw_args,
+        iodevices_LEGODevice_obj_t, self,
+        PB_ARG_REQUIRED(data)
+    );
+
+    // Assert that data argument are bytes
+    if (!(mp_obj_is_str_or_bytes(data) || mp_obj_is_type(data, &mp_type_bytearray))) {
+        pb_assert(PBIO_ERROR_INVALID_ARG);
+    }
+
+    // Get data and length
+    GET_STR_DATA_LEN(data, bytes, len);
+
+    // Write data to serial
+    pb_assert(pbio_serial_write(self->serial, bytes, len));
+
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_KW(iodevices_LEGODevice_write_obj, 1, iodevices_LEGODevice_write);
+
+// pybricks.iodevices.LEGODevice.waiting
+STATIC mp_obj_t iodevices_LEGODevice_waiting(mp_obj_t self_in) {
+    iodevices_LEGODevice_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    size_t waiting;
+    pb_assert(pbio_serial_in_waiting(self->serial, &waiting));
+    return mp_obj_new_int(waiting);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(iodevices_LEGODevice_waiting_obj, iodevices_LEGODevice_waiting);
+
+// pybricks.iodevices.LEGODevice._read_internal
+STATIC mp_obj_t iodevices_LEGODevice_read_internal(iodevices_LEGODevice_obj_t *self, size_t len) {
+
+    if (len > UART_MAX_LEN) {
+        pb_assert(PBIO_ERROR_INVALID_ARG);
+    }
+
+    // If we don't need to read anything, return empty bytearray
+    if (len < 1) {
+        uint8_t none = 0;
+        return mp_obj_new_bytes(&none, 0);
+    }
+
+    // Read data into buffer
+    uint8_t *buf = m_malloc(len);
+    if (buf == NULL) {
+        pb_assert(PBIO_ERROR_FAILED);
+    }
+
+    // Read up to the timeout
+    pbio_error_t err;
+    while ((err = pbio_serial_read(self->serial, buf, len)) == PBIO_ERROR_AGAIN) {
+        mp_hal_delay_ms(10);
+    }
+    // Raise io/timeout error if needed.
+    pb_assert(err);
+
+    // Convert to bytes
+    mp_obj_t ret = mp_obj_new_bytes(buf, len);
+
+    // Free internal buffer and return bytes
+    m_free(buf, len);
+    return ret;
+}
+
+// pybricks.iodevices.LEGODevice.read
+STATIC mp_obj_t iodevices_LEGODevice_read(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+
+    PB_PARSE_ARGS_METHOD(n_args, pos_args, kw_args,
+        iodevices_LEGODevice_obj_t, self,
+        PB_ARG_DEFAULT_INT(length, 1)
+    );
+
+    size_t len = mp_obj_get_int(length);
+    return iodevices_LEGODevice_read_internal(self, len);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_KW(iodevices_LEGODevice_read_obj, 1, iodevices_LEGODevice_read);
+
+// pybricks.iodevices.LEGODevice.read_all
+STATIC mp_obj_t iodevices_LEGODevice_read_all(mp_obj_t self_in) {
+
+    iodevices_LEGODevice_obj_t *self = MP_OBJ_TO_PTR(self_in);
+
+    size_t len;
+    pb_assert(pbio_serial_in_waiting(self->serial, &len));
+
+    return iodevices_LEGODevice_read_internal(self, len);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(iodevices_LEGODevice_read_all_obj, iodevices_LEGODevice_read_all);
+
+// pybricks.iodevices.LEGODevice.clear
+STATIC mp_obj_t iodevices_LEGODevice_clear(mp_obj_t self_in) {
+    iodevices_LEGODevice_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    pb_assert(pbio_serial_clear(self->serial));
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(iodevices_LEGODevice_clear_obj, iodevices_LEGODevice_clear);
+
+// dir(pybricks.iodevices.LEGODevice)
+STATIC const mp_rom_map_elem_t iodevices_LEGODevice_locals_dict_table[] = {
+    { MP_ROM_QSTR(MP_QSTR_read),  MP_ROM_PTR(&iodevices_LEGODevice_read_obj) },
+    { MP_ROM_QSTR(MP_QSTR_read_all),  MP_ROM_PTR(&iodevices_LEGODevice_read_all_obj) },
+    { MP_ROM_QSTR(MP_QSTR_write),  MP_ROM_PTR(&iodevices_LEGODevice_write_obj) },
+    { MP_ROM_QSTR(MP_QSTR_waiting),MP_ROM_PTR(&iodevices_LEGODevice_waiting_obj) },
+    { MP_ROM_QSTR(MP_QSTR_clear),MP_ROM_PTR(&iodevices_LEGODevice_clear_obj) },
+};
+STATIC MP_DEFINE_CONST_DICT(iodevices_LEGODevice_locals_dict, iodevices_LEGODevice_locals_dict_table);
+
+// type(pybricks.iodevices.LEGODevice)
+STATIC const mp_obj_type_t iodevices_LEGODevice_type = {
+    { &mp_type_type },
+    .name = MP_QSTR_LEGODevice,
+    .make_new = iodevices_LEGODevice_make_new,
+    .locals_dict = (mp_obj_dict_t*)&iodevices_LEGODevice_locals_dict,
+};
+
+
+
 #endif //if PYBRICKS_PY_IODEVICES
+
+
+
